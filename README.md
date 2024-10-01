@@ -12,5 +12,8 @@ graph TD;
     K --> B;
 
     G;
+    
     click G href "./NeuralNetworks.md" "Go to Example"
 ```
+
+[another Markdown file](./NeuralNetworks.md)
