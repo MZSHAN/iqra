@@ -9,4 +9,5 @@
 | Day 5 | Thread Coarsed Matrix Multiplication |
 | Day 6 | Creating Pytorch Bindings for Cuda Kernels |
 | Day 7 | 3D ReLu kernel |
-| Day 8 | Shared memory Convolution |
+| Day 8 | Constant memory Convolution |
+| Day 9 | Tested and debugged Convolution |
