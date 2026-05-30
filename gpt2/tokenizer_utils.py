@@ -6,7 +6,7 @@ from collections import Counter
 
 
 NUM_CHUNKS = 4
-DOC_SPLIT_TOKEN="<|endoftext|>"
+DOC_SPLIT_TOKENS=["<|endoftext|>"]
 PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
 
 # ==========================================
@@ -15,7 +15,7 @@ PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s
 def find_chunk_boundaries(
     file: BinaryIO,
     num_chunks: int,
-    split_special_token: bytes
+    split_special_tokens: list[bytes]
 ) -> list[int]:
     """
     Chunk the file into byte boundaries
@@ -34,10 +34,14 @@ def find_chunk_boundaries(
     chunk_boundaries[-1] = file_size  # to ensure that final chunk is not beyond file size
 
     mini_chunk_size = 4096 # bytes to read in memory to determine boundaries
-    overlap_size = len(split_special_token)-1 # To ensure we can read special tokens at chunk boundaries
+    max_size_special_token = max(split_special_tokens, key= lambda x: len(x))
+    overlap_size = len(max_size_special_token)-1 # To ensure we can read special tokens at chunk boundaries
+
+    delim_pattern = b"|".join(map(re.escape, split_special_tokens))
+    delim_regex = re.compile(delim_pattern)
 
     # The starting and end boundaries of file remain fixed, we move others as per split token
-    for idx in range(1, len(chunk_boundaries) - 1):
+    for idx in range(1, len(chunk_boundaries) - 1):        
         initial_boundary = chunk_boundaries[idx]
         file.seek(initial_boundary)
         while True:
@@ -46,9 +50,9 @@ def find_chunk_boundaries(
                 chunk_boundaries[idx] = file_size
                 break
 
-            found_at = mini_chunk.find(split_special_token)
-            if found_at != -1:
-                chunk_boundaries[idx] = initial_boundary + found_at + len(split_special_token) # keeps special token inside chunks
+            match = delim_regex.search(mini_chunk)
+            if match:
+                chunk_boundaries[idx] = initial_boundary + match.end() # keeps special token inside chunks
                 break
 
             initial_boundary += mini_chunk_size - overlap_size
@@ -63,7 +67,7 @@ def stream_document_byte_range(
     filepath: str,
     start_byte: int,
     end_byte: int,
-    split_special_token: bytes
+    split_special_tokens: list[bytes]
 ) -> Iterator[str]:
     """
     Memory-efficient generator that only reads within assigned byte boundaries
@@ -72,6 +76,9 @@ def stream_document_byte_range(
     chunk_size = 65536 # 64 * 1024 - 64KB
 
     bytes_to_read = end_byte - start_byte
+    
+    delim_pattern = b"|".join(map(re.escape, split_special_tokens))
+    delim_regex = re.compile(delim_pattern)
     
     with open(filepath, 'rb') as file:
         file.seek(start_byte)
@@ -87,8 +94,13 @@ def stream_document_byte_range(
 
             buffer += raw_bytes
 
-            while split_special_token in buffer:
-                chunk, buffer = buffer.split(split_special_token, 1)
+            while True:
+                match = delim_regex.search(buffer)
+                if not match:
+                    break
+
+                chunk = buffer[:match.start()]
+                buffer = buffer[match.end():]
                 if chunk:
                     yield chunk.decode('utf-8', errors='ignore')
         
@@ -102,11 +114,11 @@ def pretokenize_file_byte_range(
     file_path: str,
     start_byte: int,
     end_byte: int,
+    special_tokens: list[bytes]
 ):
-    token_bytes = DOC_SPLIT_TOKEN.encode('utf-8')
     file_chunk_counts =  Counter()  
 
-    for doc in stream_document_byte_range(file_path, start_byte, end_byte, token_bytes):
+    for doc in stream_document_byte_range(file_path, start_byte, end_byte, special_tokens):
         for pattern_match in re.finditer(PAT, doc):
             byte_int_tuple = tuple(pattern_match.group(0).encode('utf-8'))
             file_chunk_counts[byte_int_tuple] += 1
@@ -117,12 +129,12 @@ def pretokenize_file_byte_range(
 def pretokenize_file(
     file_path: str
 ) -> Counter[tuple[int]]:
-    token_bytes = DOC_SPLIT_TOKEN.encode('utf-8')
+    special_tokens_bytes = [token.encode('utf-8') for token in DOC_SPLIT_TOKENS]
     with open(file_path, 'rb') as  f:
-        chunk_boundaries = find_chunk_boundaries(f, NUM_CHUNKS, token_bytes)
+        chunk_boundaries = find_chunk_boundaries(f, NUM_CHUNKS, special_tokens_bytes)
 
         chunks = zip(chunk_boundaries[:-1], chunk_boundaries[1:])
-        tasks = [(file_path, start, end) for start, end in chunks]
+        tasks = [(file_path, start, end, special_tokens_bytes) for start, end in chunks]
         num_tasks = len(tasks)
 
         pretokenized_cache = Counter()
