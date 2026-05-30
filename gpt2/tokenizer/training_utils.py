@@ -1,40 +1,60 @@
-from collections import Counter
+from collections import Counter, defaultdict
 
-def get_counts(cache):
-    """
-    Get pair counts from the current pretokenized and merged cache
-    """
-    counts = Counter()
 
-    for byte_subword in cache:
-        for i in range(len(byte_subword)-1):
-            key = (byte_subword[i], byte_subword[i+1])
-            counts[key] += cache[byte_subword]
+def initialize_bpe(pre_tokenized_cache) -> tuple[Counter[tuple], defaultdict[tuple, set]]:
+    pair_counts = Counter()
+    pair_to_subword_map = defaultdict(set)
+
+    for subword in pre_tokenized_cache:
+        for i in range(len(subword)-1):
+            pair = (subword[i], subword[i+1])
+            pair_counts[pair] += pre_tokenized_cache[subword]
+            pair_to_subword_map[pair].add(subword)
     
-    return counts
+    return pair_counts, pair_to_subword_map
 
-def merge(cache, counts, vocabulary, merges):
-    # add merged to vocab and to merges list
-    # change cache to reflect merges
-    
-    max_occuring_pair = max(counts, key=lambda x: (counts[x], x))
+
+def bpe_merge(cache, pair_counts, pair_to_subword_map,  vocabulary, merges):
+    max_occuring_pair = max(pair_counts, key=lambda x: (pair_counts[x], x))
     next_vocab_item = len(vocabulary)
     vocabulary[max_occuring_pair] = next_vocab_item
     merges.append(max_occuring_pair)
 
-    new_cache = Counter()
+    # these subwords will be deleted(from the cache) and replaced with subwords with merged pair
+    subwords_to_process = list(pair_to_subword_map.get(max_occuring_pair, []))
+    
+    # loop over subwords and reduce the counts of all pairs in subword that will change
+    # later pairs in the new subword will be incremented, thus preventing re-calculating counts
+    for subword in subwords_to_process:
+        freq = cache[subword]
 
-    for byte_subword in cache:
+        del cache[subword]
+
+        for i in range(len(subword)-1):
+            pair = (subword[i], subword[i+1])
+            pair_counts[pair] -= freq # reduce the counts in old sub-word
+
+            if pair_counts[pair] <= 0:
+                del pair_counts[pair] # not necessary to do, but will speedup max operation
+            
+            # since subword is deleted from cache, and subword pairs have pointers to the subword, remove them from the map
+            pair_to_subword_map[pair].discard(subword) # discard = remove it exists
+            
+        new_sub_word = []
         i = 0
-        new_key = []
-        while i < len(byte_subword):
-            if i < len(byte_subword)-1 and (byte_subword[i], byte_subword[i+1]) == max_occuring_pair:
-                new_key.append(next_vocab_item)
+        while i < len(subword):
+            if i < len(subword)-1 and (subword[i], subword[i+1]) == max_occuring_pair:
+                new_sub_word.append(next_vocab_item)
                 i += 2
             else:
-                new_key.append(byte_subword[i])
+                new_sub_word.append(subword[i])
                 i += 1
         
-        new_cache[tuple(new_key)] = cache[byte_subword]
-    
-    return new_cache, merges
+        cache[tuple(new_sub_word)] = freq
+
+        for i in range(len(new_sub_word)-1):
+            pair = (new_sub_word[i], new_sub_word[i+1])
+            pair_counts[pair] += freq
+            pair_to_subword_map[pair].add(tuple(new_sub_word))
+
+    return cache, pair_counts, pair_to_subword_map, merges    
