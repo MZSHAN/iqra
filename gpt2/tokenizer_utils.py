@@ -74,11 +74,12 @@ def stream_document_byte_range(
     """
     buffer = b""
     chunk_size = 65536 # 64 * 1024 - 64KB
-
     bytes_to_read = end_byte - start_byte
     
     delim_pattern = b"|".join(map(re.escape, split_special_tokens))
     delim_regex = re.compile(delim_pattern)
+
+    max_size_special_token = max(len(token) for token in split_special_tokens)
     
     with open(filepath, 'rb') as file:
         file.seek(start_byte)
@@ -92,15 +93,18 @@ def stream_document_byte_range(
             if not raw_bytes:
                 break
 
+            
+            search_start_idx = max(0, len(buffer) - max_size_special_token + 1)
             buffer += raw_bytes
 
             while True:
-                match = delim_regex.search(buffer)
+                match = delim_regex.search(buffer, search_start_idx)
                 if not match:
                     break
 
                 chunk = buffer[:match.start()]
                 buffer = buffer[match.end():]
+                search_start_idx = 0
                 if chunk:
                     yield chunk.decode('utf-8', errors='ignore')
         
