@@ -4,9 +4,6 @@ import regex as re
 from typing import BinaryIO, Iterator
 from collections import Counter
 
-
-NUM_CHUNKS = 4
-DOC_SPLIT_TOKENS=["<|endoftext|>"]
 PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
 
 # ==========================================
@@ -131,11 +128,13 @@ def pretokenize_file_byte_range(
     
 
 def pretokenize_file(
-    file_path: str
+    file_path: str, 
+    doc_split_tokens, 
+    num_chunks
 ) -> Counter[tuple[int]]:
-    special_tokens_bytes = [token.encode('utf-8') for token in DOC_SPLIT_TOKENS]
+    special_tokens_bytes = [token.encode('utf-8') for token in doc_split_tokens]
     with open(file_path, 'rb') as  f:
-        chunk_boundaries = find_chunk_boundaries(f, NUM_CHUNKS, special_tokens_bytes)
+        chunk_boundaries = find_chunk_boundaries(f, num_chunks, special_tokens_bytes)
 
         chunks = zip(chunk_boundaries[:-1], chunk_boundaries[1:])
         tasks = [(file_path, start, end, special_tokens_bytes) for start, end in chunks]

@@ -17,8 +17,10 @@ def initialize_bpe(pre_tokenized_cache) -> tuple[Counter[tuple], defaultdict[tup
 def bpe_merge(cache, pair_counts, pair_to_subword_map,  vocabulary, merges):
     max_occuring_pair = max(pair_counts, key=lambda x: (pair_counts[x], x))
     next_vocab_item = len(vocabulary)
-    vocabulary[max_occuring_pair] = next_vocab_item
+    left_token_id, right_token_id = max_occuring_pair
+    vocabulary[next_vocab_item] = vocabulary[left_token_id] + vocabulary[right_token_id]
     merges.append(max_occuring_pair)
+    
 
     # these subwords will be deleted(from the cache) and replaced with subwords with merged pair
     subwords_to_process = list(pair_to_subword_map.get(max_occuring_pair, []))
