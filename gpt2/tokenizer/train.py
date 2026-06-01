@@ -2,7 +2,7 @@ import pickle
 from tqdm import tqdm
 
 from pretokenization_utils import pretokenize_file
-from tokenizer.training_utils import initialize_bpe, bpe_merge
+from training_utils import initialize_bpe, bpe_merge
 
 NUM_CHUNKS = 4
 
@@ -11,6 +11,7 @@ def bpe_train(
     vocab_size: int,
     special_tokens: list[str]
 ) -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
+    print ("Starting pre-tokenization")
     pretokenized_cache = pretokenize_file(
         input_path,
         special_tokens,
@@ -38,8 +39,8 @@ def bpe_train(
 
 
 if __name__ == "__main__":
-    input_file = "../data/TinyStoriesV2-GPT4-train.txt"
-    vocab_size = 10000
+    input_file = "../data/owt_train.txt"
+    vocab_size = 32000
     special_tokens = ["<|endoftext|>"]
 
     vocabulary, byte_merges = bpe_train(input_file, vocab_size, special_tokens)
@@ -49,7 +50,7 @@ if __name__ == "__main__":
     }
 
     # Serialize to disk
-    with open("bpe_data.pkl", "wb") as f:
+    with open("bpe_owt_train.pkl", "wb") as f:
         pickle.dump(data_to_save, f)
 
-    print("Vocabulary and merges saved to bpe_data.pkl")
+    print("Vocabulary and merges saved to bpe_owt_train.pkl")

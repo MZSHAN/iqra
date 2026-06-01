@@ -70,7 +70,7 @@ def stream_document_byte_range(
     Memory-efficient generator that only reads within assigned byte boundaries
     """
     buffer = b""
-    chunk_size = 65536 # 64 * 1024 - 64KB
+    chunk_size = 65536 * 16 # 64 * 1024 * 16- 1MB
     bytes_to_read = end_byte - start_byte
     
     delim_pattern = b"|".join(map(re.escape, split_special_tokens))
