@@ -19,9 +19,10 @@ class Tokenizer:
         self.vocab = vocab
         self.merges = merges
         self.special_tokens = special_tokens
-        self.special_tokens_set = set(special_tokens) if special_tokens else set()
 
+        self.special_tokens_set = set(special_tokens) if special_tokens else set()
         self.bytes_to_int = {j:i for i, j in vocab.items()}
+        self.merge_priority = {merge:i for i, merge in enumerate(merges)}
         
 
     @classmethod
@@ -72,20 +73,31 @@ class Tokenizer:
                 encoded_string.append(self.bytes_to_int[byte_word])
                 continue
 
-            byte_string = [bytes([b]) for b in byte_word]
+            byte_arr = [bytes([b]) for b in byte_word]
 
-            for merge in self.merges:
-                merged_byte_string = []
+            while True:
+                if len(byte_arr) == 1:
+                    break
+
+                byte_pairs = [(byte_arr[i], byte_arr[i+1]) for i in range(len(byte_arr)-1)]
+                merge_pair = min(byte_pairs, key=lambda x: self.merge_priority.get(x, float('inf')))
+
+                if merge_pair not in self.merge_priority:
+                    break
+                
+                merged_byte_arr = []
                 i = 0
-                while i < len(byte_string):
-                    if i < len(byte_string) - 1 and merge == (byte_string[i], byte_string[i+1]):
-                        merged_byte_string.append(byte_string[i] + byte_string[i+1])
+                while i < len(byte_arr):
+                    if i < len(byte_arr)-1 and merge_pair == (byte_arr[i], byte_arr[i+1]):
+                        merged_byte_arr.append(byte_arr[i] + byte_arr[i+1])
                         i += 2
                     else:
-                        merged_byte_string.append(byte_string[i])
+                        merged_byte_arr.append(byte_arr[i])
                         i += 1
-                byte_string = merged_byte_string
-            encoded_string.extend([self.bytes_to_int[subword] for subword in byte_string])
+                byte_arr = merged_byte_arr
+            
+            encoded_string.extend(self.bytes_to_int[chunk] for chunk in byte_arr)
+
         return encoded_string
 
 
